@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Attendance Chart</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    #alertBox { font-weight: bold; margin-top: 20px; }
+    canvas { max-width: 100%; }
+  </style>
+</head>
+<body>
+  <h2>Your Attendance Summary</h2>
+  <canvas id="attendanceChart"></canvas>
+  <div id="alertBox"></div>
+
+  <script>
+    const studentId = localStorage.getItem("currentUserId") || "S001";
+    const attendance = JSON.parse(localStorage.getItem("attendance") || "[]");
+
+    // Filter this student's attendance
+    const myAttendance = attendance.filter(a => a.studentId === studentId);
+
+    // Group by sessionId
+    const sessionMap = {};
+    myAttendance.forEach(entry => {
+      sessionMap[entry.sessionId] = entry.gpsMatch;  // true or false
+    });
+
+    const sessionIds = Object.keys(sessionMap).sort();
+    const attended = sessionIds.map(sid => sessionMap[sid] ? 1 : 0);
+
+    // Calculate %
+    const total = attended.length;
+    const present = attended.filter(a => a === 1).length;
+    const percentage = total ? (present / total * 100).toFixed(2) : 0;
+
+    // Predict how many more to reach 75%
+    let required = 0;
+    while ((present + required) / (total + required) < 0.75) {
+      required++;
+    }
+
+    // Show alert
+    const alertBox = document.getElementById("alertBox");
+    if (percentage < 75) {
+      alertBox.style.color = "red";
+      alertBox.innerText = `⚠️ Attendance is ${percentage}%. You need ${required} more lectures to reach 75%.`;
+    } else {
+      alertBox.style.color = "green";
+      alertBox.innerText = `✅ Great! Your attendance is ${percentage}%. Keep it up!`;
+    }
+
+    // Render chart
+    new Chart(document.getElementById("attendanceChart"), {
+      type: 'bar',
+      data: {
+        labels: sessionIds,
+        datasets: [{
+          label: 'Attendance (1 = Present, 0 = Absent)',
+          data: attended,
+          backgroundColor: attended.map(v => v ? 'green' : 'red'),
+        }]
+      },
+      options: {
+        scales: {
+          y: { beginAtZero: true, max: 1 }
+        }
+      }
+    });
+  </script>
+</body>
+</html>
