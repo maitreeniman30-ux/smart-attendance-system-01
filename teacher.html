@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Teacher Panel</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <style>
+    #qrCanvas { margin-top: 10px; }
+    img { max-width: 200px; }
+    table, th, td { border: 1px solid black; border-collapse: collapse; padding: 8px; }
+  </style>
+</head>
+<body>
+  <h2>Teacher Panel</h2>
+
+  <button onclick="generateSession()">Generate QR for Attendance</button>
+  <div id="qrResult"></div>
+
+  <h3>Session Attendance Records</h3>
+  <div id="records"></div>
+
+  <script>
+    const teacherId = localStorage.getItem("currentUserId") || "T001";
+
+    function generateSession() {
+      navigator.geolocation.getCurrentPosition(pos => {
+        const location = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude
+        };
+
+        const sessionId = "S" + Date.now();  // Unique session ID
+        const sessionData = { sessionId, teacherId, location };
+
+        // Save session
+        let sessions = JSON.parse(localStorage.getItem("sessions") || "[]");
+        sessions.push(sessionData);
+        localStorage.setItem("sessions", JSON.stringify(sessions));
+
+        // Generate QR
+        const qrText = JSON.stringify(sessionData);
+        QRCode.toDataURL(qrText, (err, url) => {
+          document.getElementById("qrResult").innerHTML = `
+            <p><strong>Session ID:</strong> ${sessionId}</p>
+            <img src="${url}" alt="QR Code" />
+          `;
+        });
+
+        // Load records
+        showRecords(sessionId);
+
+      }, err => alert("Location error: " + err.message));
+    }
+
+    function showRecords(sessionId) {
+      const attendance = JSON.parse(localStorage.getItem("attendance") || "[]");
+      const filtered = attendance.filter(a => a.sessionId === sessionId);
+
+      if (filtered.length === 0) {
+        document.getElementById("records").innerHTML = "<p>No attendance yet.</p>";
+        return;
+      }
+
+      let table = `
+        <table>
+          <tr>
+            <th>Student ID</th>
+            <th>Photo</th>
+            <th>GPS Match</th>
+            <th>Timestamp</th>
+          </tr>
+      `;
+
+      filtered.forEach(entry => {
+        table += `
+          <tr>
+            <td>${entry.studentId}</td>
+            <td><img src="${entry.photo}" width="60"/></td>
+            <td>${entry.gpsMatch ? "✅" : "❌"}</td>
+            <td>${new Date(entry.timestamp).toLocaleString()}</td>
+          </tr>
+        `;
+      });
+
+      table += "</table>";
+      document.getElementById("records").innerHTML = table;
+    }
+  </script>
+</body>
+</html>
