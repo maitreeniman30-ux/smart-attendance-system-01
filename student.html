@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Student Attendance</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    video, canvas { max-width: 100%; }
+    #reader { width: 300px; margin: auto; }
+  </style>
+</head>
+<body>
+  <h2>Student Attendance</h2>
+
+  <div id="reader"></div>
+  <button onclick="startQR()">Start QR Scanner</button>
+  <br><br>
+
+  <video id="camera" autoplay playsinline width="300"></video>
+  <canvas id="snapshotCanvas" style="display:none;"></canvas>
+  <button onclick="captureAndSubmit()">Capture & Submit Attendance</button>
+
+  <script>
+    let sessionData = null;
+    let studentId = localStorage.getItem("currentUserId") || "S001";
+
+    // Start QR scanner
+    function startQR() {
+      const html5QrCode = new Html5Qrcode("reader");
+      html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 250 },
+        (decodedText) => {
+          try {
+            sessionData = JSON.parse(decodedText);
+            alert("Session Scanned. Now capture photo & GPS.");
+            html5QrCode.stop();
+          } catch (e) {
+            alert("Invalid QR Code");
+          }
+        },
+        (errorMsg) => {
+          // console.log(`QR Error: ${errorMsg}`);
+        }
+      );
+    }
+
+    // Start camera for photo
+    const video = document.getElementById("camera");
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(stream => video.srcObject = stream)
+      .catch(err => alert("Camera error: " + err));
+
+    // Capture and Submit Attendance
+    async function captureAndSubmit() {
+      if (!sessionData) return alert("Please scan QR code first");
+
+      // Capture photo
+      const canvas = document.getElementById("snapshotCanvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const photoBase64 = canvas.toDataURL("image/jpeg");
+
+      // Get GPS
+      navigator.geolocation.getCurrentPosition(position => {
+        const studentLat = position.coords.latitude;
+        const studentLng = position.coords.longitude;
+
+        const teacherLat = sessionData.location.lat;
+        const teacherLng = sessionData.location.lng;
+
+        const gpsMatch = distance(studentLat, studentLng, teacherLat, teacherLng) < 0.1;
+
+        // Save to localStorage
+        let attendance = JSON.parse(localStorage.getItem("attendance") || "[]");
+        attendance.push({
+          studentId,
+          sessionId: sessionData.sessionId,
+          photo: photoBase64,
+          gpsMatch,
+          timestamp: new Date().toISOString()
+        });
+        localStorage.setItem("attendance", JSON.stringify(attendance));
+
+        alert(gpsMatch ? "✅ Attendance Marked" : "❌ GPS Mismatch - Proxy not allowed");
+
+      }, err => alert("GPS Error: " + err.message));
+    }
+
+    // Distance between coordinates (Haversine)
+    function distance(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = 
+        0.5 - Math.cos(dLat)/2 +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        (1 - Math.cos(dLon)) / 2;
+      return R * 2 * Math.asin(Math.sqrt(a)); // in KM
+    }
+  </script>
+</body>
+</html>
