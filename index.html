@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Smart Attendance System - Login & Dashboard</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      background: linear-gradient(135deg, #11b8cb, #2582fc);
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    #loginCard {
+      background: rgba(0,0,0,0.6);
+      padding: 30px;
+      border-radius: 15px;
+      width: 320px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      text-align: center;
+    }
+    #studentCard {
+      background: rgba(0,0,0,0.6);
+      padding: 30px;
+      border-radius: 15px;
+      width: 700px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      display: none;
+    }
+    h1, h2 {
+      color: #ffd700;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    select, input, button {
+      width: 100%;
+      padding: 12px;
+      margin: 10px 0;
+      border-radius: 8px;
+      border: none;
+      font-size: 16px;
+    }
+    button {
+      background: #ff9800;
+      color: #fff;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+    button:hover {
+      background: #e68900;
+    }
+    .error {
+      color: #ff5722;
+      font-weight: bold;
+      margin-top: 10px;
+    }
+    label {
+      display: block;
+      margin-top: 10px;
+      font-weight: bold;
+      text-align: left;
+    }
+    #attendanceStatus, #attendanceAlert, #attendanceProgress {
+      margin-top: 15px;
+      font-weight: bold;
+    }
+    #attendanceAlert {
+      color: #ff5722;
+    }
+    #logoutBtn {
+      background: #f44336;
+      margin-top: 30px;
+      width: 100%;
+      font-size: 18px;
+    }
+    canvas {
+      background: #fff;
+      border-radius: 8px;
+      margin-top: 20px;
+      padding: 10px;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- Login Section -->
+  <div id="loginCard">
+    <h2>Smart Attendance System</h2>
+    <label for="roleSelect">Select Role</label>
+    <select id="roleSelect" onchange="updateForm()">
+      <option value="student">👩‍🎓 Student</option>
+      <option value="teacher">👨‍🏫 Teacher</option>
+      <option value="admin">🛠️ Admin</option>
+    </select>
+
+    <div id="studentTeacherFields">
+      <label for="userId">User  ID</label>
+      <input type="text" id="userId" placeholder="Enter User ID" autocomplete="off" />
+      <label for="userName">Name</label>
+      <input type="text" id="userName" placeholder="Enter Name" autocomplete="off" />
+      <label for="userClass">Class</label>
+      <input type="text" id="userClass" placeholder="Enter Class" autocomplete="off" />
+    </div>
+
+    <div id="adminFields" class="hidden">
+      <label for="adminUserId">User ID</label>
+      <input type="text" id="adminUserId" placeholder="Enter User ID" autocomplete="off" />
+      <label for="adminPassword">Password</label>
+      <input type="password" id="adminPassword" placeholder="Enter Password" autocomplete="off" />
+    </div>
+
+    <button onclick="login()">Login</button>
+    <p id="errorMsg" class="error" style="display:none;"></p>
+  </div>
+
+  <!-- Student Dashboard Section -->
+  <div id="studentCard">
+    <h2>Student Dashboard</h2>
+    <div>
+      <p><strong>User ID:</strong> <span id="displayId"></span></p>
+      <p><strong>Name:</strong> <span id="displayName"></span></p>
+      <p><strong>Class:</strong> <span id="displayClass"></span></p>
+    </div>
+
+    <button id="scanQRBtn">📷 Scan QR Code (Simulate)</button>
+    <button id="takePhotoBtn">😀 Take Photo</button>
+    <button id="checkLocationBtn">📡 Check Location</button>
+
+    <p id="attendanceStatus">Attendance status will appear here.</p>
+    <p id="attendanceAlert" style="display:none;"></p>
+    <p id="attendanceProgress"></p>
+
+    <canvas id="attendanceChart" width="400" height="200"></canvas>
+
+    <button id="logoutBtn">Logout</button>
+  </div>
+
+  <script>
+    // Initialize data if not present
+    if (!localStorage.getItem('smartAttendanceData')) {
+      const initialData = {
+        users: [
+          {id: 'Maitree', password: '001', name: 'Admin Maitree', role: 'admin'},
+          {id: 'TEA001', password: 'teachpass', name: 'Mr. Sharma', role: 'teacher', class: '10A'},
+          {id: 'STU001', password: 'studpass', name: 'Aisha Khan', role: 'student', class: '10A'},
+          {id: 'STU002', password: 'studpass', name: 'Rohan Mehta', role: 'student', class: '10B'}
+        ],
+        attendance: []
+      };
+      localStorage.setItem('smartAttendanceData', JSON.stringify(initialData));
+    }
+
+    // Constants
+    const attendanceThreshold = 0.75;
+    const totalSessions = 20; // For demo
+    const classroomLat = 40.7128;
+    const classroomLng = -74.0060;
+
+    // State variables
+    let loggedInUser = null;
+    let sessionName = null;
+    let photoTaken = false;
+    let locationVerified = false;
+
+    function updateForm() {
+      const role = document.getElementById('roleSelect').value;
+      if (role === 'admin') {
+        document.getElementById('studentTeacherFields').classList.add('hidden');
+        document.getElementById('adminFields').classList.remove('hidden');
+      } else {
+        document.getElementById('studentTeacherFields').classList.remove('hidden');
+        document.getElementById('adminFields').classList.add('hidden');
+      }
+      clearError();
+      clearInputs();
+    }
+
+    function clearInputs() {
+      document.getElementById('userId').value = '';
+      document.getElementById('userName').value = '';
+      document.getElementById('userClass').value = '';
+      document.getElementById('adminUserId').value = '';
+      document.getElementById('adminPassword').value = '';
+    }
+
+    function clearError() {
+      const errorMsg = document.getElementById('errorMsg');
+      errorMsg.style.display = 'none';
+      errorMsg.textContent = '';
+    }
+
+    function login() {
+      clearError();
+      const role = document.getElementById('roleSelect').value;
+      let id, name, userClass, password;
+
+      const data = JSON.parse(localStorage.getItem('smartAttendanceData'));
+      let user;
+
+      if (role === 'admin') {
+        id = document.getElementById('adminUserId').value.trim();
+        password = document.getElementById('adminPassword').value.trim();
+        if (!id || !password) {
+          showError('Please enter User ID and Password.');
+          return;
+        }
+        user = data.users.find(u => u.id === id && u.role === 'admin');
+        if (!user) {
+          showError('Admin user not found.');
+          return;
+        }
+        if (user.password !== password) {
+          showError('Incorrect password.');
+          return;
+        }
+      } else {
+        id = document.getElementById('userId').value.trim();
+        name = document.getElementById('userName').value.trim();
+        userClass = document.getElementById('userClass').value.trim();
+        if (!id || !name || !userClass) {
+          showError('Please enter User ID, Name, and Class.');
+          return;
+        }
+        user = data.users.find(u => u.id === id && u.role === role);
+        if (!user) {
+          showError('User not found.');
+          return;
+        }
+        if (user.name !== name || user.class !== userClass) {
+          showError('Name or Class does not match our records.');
+          return;
+        }
+      }
+
+      loggedInUser = user;
+      sessionStorage.setItem('loggedInUser', JSON.stringify(user));
+
+      if (role === 'student') {
+        switchToDashboard();
+      } else {
+        alert('Dashboard for other roles not implemented yet.');
+      }
+    }
+
+    function showError(msg) {
+      const errorMsg = document.getElementById('errorMsg');
+      errorMsg.textContent = msg;
+      errorMsg.style.display = 'block';
+    }
+
+    function switchToDashboard() {
+      document.getElementById('loginCard').classList.add('hidden');
+      document.getElementById('studentCard').classList.remove('hidden');
+
+      document.getElementById('displayId').textContent = loggedInUser.id;
+      document.getElementById('displayName').textContent = loggedInUser.name;
+      document.getElementById('displayClass').textContent = loggedInUser.class;
+
+      updateAttendanceProgress();
+      drawAttendanceChart();
+    }
+
+    // Student Dashboard Functions
+    document.getElementById('scanQRBtn').onclick = () => {
+      const input = prompt('Enter session name from QR code:');
+      if (!input) {
+        alert('Session name is required.');
+        return;
+      }
+      sessionName = input.trim();
+      document.getElementById('attendanceStatus').textContent = `Session "${sessionName}" scanned. Now take photo.`;
+      photoTaken = false;
+      locationVerified = false;
+      document.getElementById('attendanceAlert').style.display = 'none';
+    };
+
+    document.getElementById('takePhotoBtn').onclick = () => {
+      if (!sessionName) {
+        alert('Please scan QR code first.');
+        return;
+      }
+      alert('Photo captured successfully.');
+      photoTaken = true;
+      document.getElementById('attendanceStatus').textContent = 'Photo taken. Now verify location.';
+      locationVerified = false;
+      document.getElementById('attendanceAlert').style.display = 'none';
+    };
+
+    document.getElementById('checkLocationBtn').onclick = () => {
+      if (!sessionName) {
+        alert('Please scan QR code first.');
+        return;
+      }
+      if (!photoTaken) {
+        alert('Please take photo first.');
+        return;
+      }
+      if (!navigator.geolocation) {
+        alert('Geolocation not supported by your browser.');
+        return;
+      }
+      document.getElementById('attendanceStatus').textContent = 'Checking location...';
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          const distance = getDistanceFromLatLonInKm(lat, lng, classroomLat, classroomLng);
+          if (distance <= 0.1) { // within 100m
+            locationVerified = true;
+            document.getElementById('attendanceStatus').textContent = 'Location verified. Marking attendance...';
+            markAttendance();
+          } else {
+            showAttendanceAlert('Location mismatch! Attendance not marked.');
+            document.getElementById('attendanceStatus').textContent = 'Location verification failed.';
+          }
+        },
+        () => {
+          showAttendanceAlert('Unable to get location.');
+          document.getElementById('attendanceStatus').textContent = 'Location verification failed.';
+        }
+      );
+    };
+
+    function markAttendance() {
+      if (!sessionName || !photoTaken || !locationVerified) {
+        showAttendanceAlert('All steps (QR scan, photo, location) must be completed.');
+        return;
+      }
+      const data = JSON.parse(localStorage.getItem('smartAttendanceData'));
+      const alreadyMarked = data.attendance.some(a =>
+        a.id === loggedInUser.id && a.session === sessionName
+      );
+      if (alreadyMarked) {
+        document.getElementById('attendanceStatus').textContent = `Attendance already marked for session "${sessionName}".`;
+        return;
+      }
+      const now = new Date();
+      data.attendance.push({
+        id: loggedInUser.id,
+        name: loggedInUser.name,
+        class: loggedInUser.class,
+        datetime: now.toLocaleString(),
+        method: 'QR+Photo+GPS',
+        session: sessionName,
+        locationMatch: true
+      });
+      localStorage.setItem('smartAttendanceData', JSON.stringify(data));
+      document.getElementById('attendanceStatus').textContent = `✅ Attendance marked for session "${sessionName}" at ${now.toLocaleTimeString()}`;
+      updateAttendanceProgress();
+      drawAttendanceChart();
+      sessionName = null;
+      photoTaken = false;
+      locationVerified = false;
+    }
+
+    function updateAttendanceProgress() {
+      const data = JSON.parse(localStorage.getItem('smartAttendanceData'));
+      const attended = data.attendance.filter(a => a.id === loggedInUser.id).length;
+      const percent = attended / totalSessions;
+      const needed = Math.ceil(totalSessions * attendanceThreshold) - attended;
+      document.getElementById('attendanceProgress').textContent = `Attendance: ${attended}/${totalSessions} (${(percent*100).toFixed(1)}%). ` +
+        (percent >= attendanceThreshold ? '✅ You have met the attendance requirement.' :
+          `⚠️ You need ${needed > 0 ? needed : 0} more lectures to reach 75%.`);
+      if (percent < attendanceThreshold) {
+        showAttendanceAlert('⚠️ Low attendance! Attend more lectures.');
+      } else {
+        document.getElementById('attendanceAlert').style.display = 'none';
+      }
+    }
+
+    function drawAttendanceChart() {
+      const ctx = document.getElementById('attendanceChart').getContext('2d');
+      ctx.clearRect(0, 0, 400, 200);
+      const data = JSON.parse(localStorage.getItem('smartAttendanceData'));
+      const sessions = [...new Set(data.attendance.map(a => a.session))];
+      const attendancePerSession = sessions.map(session =>
+        data.attendance.some(a => a.id === loggedInUser.id && a.session === session) ? 1 : 0
+      );
+      const barWidth = 30;
+      const gap = 15;
+      ctx.fillStyle = '#2582fc';
+      sessions.forEach((session, i) => {
+        const barHeight = attendancePerSession[i] * 100;
+        ctx.fillRect(50 + i*(barWidth+gap), 150 - barHeight, barWidth, barHeight);
+        ctx.fillStyle = '#fff';
+        ctx.fillText(session, 50 + i*(barWidth+gap), 170);
+        ctx.fillStyle = '#2582fc';
+      });
+      ctx.fillStyle = '#fff';
+      ctx.fillText('Attendance per Session', 10, 20);
+    }
+
+    function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = deg2rad(lat2 - lat1);
+      const dLon = deg2rad(lon2 - lon1);
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+    function deg2rad(deg) {
+      return deg * (Math.PI / 180);
+    }
+
+    function showAttendanceAlert(msg) {
+      const alertEl = document.getElementById('attendanceAlert');
+      alertEl.textContent = msg;
+      alertEl.style.display = 'block';
+    }
+
+    document.getElementById('logoutBtn').onclick = () => {
+      sessionStorage.removeItem('loggedInUser');
+      loggedInUser = null;
+      document.getElementById('studentCard').classList.add('hidden');
+      document.getElementById('loginCard').classList.remove('hidden');
+      clearInputs();
+      clearError();
+    };
+
+    // Initialize form on load
+    updateForm();
+  </script>
+</body>
+</html>
+</content>
+</create_file>
